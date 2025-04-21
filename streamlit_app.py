@@ -187,7 +187,7 @@ if st.sidebar.button("Load example"):
 # — Main UI — 
 st.title("📝 FormsiQ 1003‑Form Field Extractor")
 st.markdown(
-    "Using **{use_ai}**, paste or load a transcript and click Extract Fields."
+    "Paste or load a transcript and click Extract Fields."
 )
 
 # CSS reminder banner
