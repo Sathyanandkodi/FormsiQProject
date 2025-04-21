@@ -96,7 +96,7 @@ st.sidebar.button(
 )
 
 # — Main UI — 
-st.title("🔎 Dummy 1003‑Form Field Extractor")
+st.title("🔎 FormsiQ 1003‑Form Field Extractor")
 st.markdown(
     "Paste a mortgage‑call transcript below and click **Extract Fields** to see the dummy extractor in action."
 )
