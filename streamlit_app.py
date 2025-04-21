@@ -215,7 +215,7 @@ else:
     # fallback to single transcript textarea
     transcripts = []
     transcript = st.text_area(
-        "Call Transcript",
+        "Call Transcript text box",
         value=st.session_state.transcript_input,
         height=250,
         key="transcript_input",
