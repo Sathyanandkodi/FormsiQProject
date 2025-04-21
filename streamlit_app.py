@@ -13,7 +13,6 @@ st.set_page_config(
 )
 
 # — OpenAI setup — 
-# Make sure to set your API key as an env var (or in Streamlit secrets)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", st.secrets.get("OPENAI_API_KEY", "")))
 
 def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
@@ -23,7 +22,7 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
     fields: List[Dict] = []
     lines = transcript.splitlines()
 
-    # Borrower Name logic is here
+    # Borrower Name logic
     name = None
     for idx, line in enumerate(lines):
         if re.search(r"full name", line, re.IGNORECASE):
@@ -58,7 +57,7 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
 
 def extract_fields_via_openai(transcript: str) -> Dict:
     """
-    Calls OpenAI’s chat API to extract 1003‑Form fields with confidence.
+    Calls OpenAI’s chat API via the `client` to extract 1003‑Form fields.
     """
     system_prompt = (
         "You are a data extraction assistant. "
@@ -72,7 +71,7 @@ def extract_fields_via_openai(transcript: str) -> Dict:
     user_prompt = f"Transcript:\n\"\"\"\n{transcript}\n\"\"\""
 
     try:
-        resp = openai.ChatCompletion.create(
+        resp = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -81,7 +80,7 @@ def extract_fields_via_openai(transcript: str) -> Dict:
             temperature=0.0,
             max_tokens=600,
         )
-        text = resp.choices[0].message.content.strip()
+        text = resp.choices[0].message.content
         return json.loads(text)
     except Exception as e:
         return {"error": str(e)}
