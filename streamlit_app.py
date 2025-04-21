@@ -17,15 +17,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", st.secrets.get("OPENAI_API_K
 
 def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
     """
-    Enhanced dummy extractor for key 1003 fields:
-      - Borrower Name
-      - Property Address
-      - Loan Amount
-      - Loan Term
-      - Interest Rate
-      - SSN
-      - Date of Birth
-      - Gross Monthly Income
+    Enhanced dummy extractor for key 1003 fields.
     """
     fields: List[Dict] = []
 
@@ -131,6 +123,7 @@ def extract_fields_via_openai(transcript: str) -> Dict:
         )
         return json.loads(resp.choices[0].message.content)
     except Exception as e:
+        # propagate error info
         return {"error": str(e)}
 
 
@@ -207,9 +200,17 @@ if st.button("Extract Fields"):
         st.error("Please provide a transcript.")
     else:
         with st.spinner("Processing…"):
-            result = (extract_fields_via_openai(transcript)
-                      if use_ai == "AI extractor"
-                      else extract_fields_dummy(transcript))
+            if use_ai == "AI extractor":
+                result = extract_fields_via_openai(transcript)
+                # Fallback on quota or 429 errors
+                if "error" in result and any(term in result["error"].lower() for term in ("quota", "429")):
+                    st.warning(
+                        "🚫 OpenAI quota exceeded or API limit reached. "
+                        "Falling back to Dummy extractor."
+                    )
+                    result = extract_fields_dummy(transcript)
+            else:
+                result = extract_fields_dummy(transcript)
 
         if "error" in result:
             st.error(f"Error: {result['error']}")
