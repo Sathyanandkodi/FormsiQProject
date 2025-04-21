@@ -16,50 +16,109 @@ st.set_page_config(
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", st.secrets.get("OPENAI_API_KEY", "")))
 
 def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
+    """
+    Enhanced dummy extractor for key 1003 fields:
+      - Borrower Name
+      - Property Address
+      - Loan Amount
+      - Loan Term
+      - Interest Rate
+      - SSN
+      - Date of Birth
+      - Gross Monthly Income
+    """
     fields: List[Dict] = []
-    lines = transcript.splitlines()
 
-    # Borrower Name logic
-    name = None
-    for idx, line in enumerate(lines):
-        if re.search(r"full name", line, re.IGNORECASE):
-            for sub in lines[idx+1:]:
-                m = re.match(r"Borrower\s*:\s*(.+)", sub, re.IGNORECASE)
-                if m:
-                    name = m.group(1).strip()
-                    break
-            break
-    if name:
+    # 1) Borrower Name
+    m = re.search(r"Borrower\s*:\s*(.+)", transcript, re.IGNORECASE)
+    if m:
         fields.append({
             "field_name": "Borrower Name",
-            "field_value": name,
+            "field_value": m.group(1).strip(),
             "confidence_score": 0.50
         })
 
-    # Loan Amount logic
+    # 2) Property Address
+    m = re.search(r"home at\s*(.+?)\.", transcript, re.IGNORECASE)
+    if m:
+        fields.append({
+            "field_name": "Property Address",
+            "field_value": m.group(1).strip(),
+            "confidence_score": 0.50
+        })
+
+    # 3) Loan Amount
     m = re.search(r"loan for\s*\$?([\d,]+)", transcript, re.IGNORECASE) \
         or re.search(r"purchase price is\s*\$?([\d,]+)", transcript, re.IGNORECASE)
     if m:
-        amt = m.group(1).strip()
         fields.append({
             "field_name": "Loan Amount",
-            "field_value": f"${amt}",
+            "field_value": f"${m.group(1).strip()}",
             "confidence_score": 0.50
+        })
+
+    # 4) Loan Term
+    m = re.search(r"(\d+)-year fixed rate", transcript, re.IGNORECASE)
+    if m:
+        fields.append({
+            "field_name": "Loan Term",
+            "field_value": f"{m.group(1)}-year",
+            "confidence_score": 0.50
+        })
+
+    # 5) Interest Rate
+    m = re.search(r"rate is\s*([\d.]+%)", transcript, re.IGNORECASE)
+    if m:
+        fields.append({
+            "field_name": "Interest Rate",
+            "field_value": m.group(1),
+            "confidence_score": 0.75
+        })
+
+    # 6) SSN
+    m = re.search(r"SSN is\s*([\d-]+)", transcript, re.IGNORECASE)
+    if m:
+        fields.append({
+            "field_name": "SSN",
+            "field_value": m.group(1),
+            "confidence_score": 0.90
+        })
+
+    # 7) Date of Birth
+    m = re.search(r"DOB is\s*([\d/]+)", transcript, re.IGNORECASE)
+    if m:
+        fields.append({
+            "field_name": "Date of Birth",
+            "field_value": m.group(1),
+            "confidence_score": 0.95
+        })
+
+    # 8) Gross Monthly Income
+    m = re.search(r"gross monthly income.*?([\$\d,]+)", transcript, re.IGNORECASE)
+    if m:
+        fields.append({
+            "field_name": "Gross Monthly Income",
+            "field_value": m.group(1),
+            "confidence_score": 0.75
         })
 
     return {"fields": fields}
 
+
 def extract_fields_via_openai(transcript: str) -> Dict:
+    """
+    AI extractor: calls OpenAI to get full 1003 field extraction.
+    """
     system_prompt = (
         "You are a data extraction assistant. "
         "Extract all fields from the 1003 mortgage application form "
-        "(Borrower Name, Loan Amount, Property Address, Loan Term, Interest Rate, etc.) "
-        "from the call transcript. "
+        "(Borrower Name, Loan Amount, Property Address, Loan Term, Interest Rate, "
+        "SSN, Date of Birth, Gross Monthly Income, etc.) from the call transcript. "
         "For each field, output an object with 'field_name', 'field_value', and "
-        "'confidence_score' (0–1). "
-        "Respond ONLY with JSON: { \"fields\": [ ... ] }."
+        "'confidence_score' (0–1). Respond ONLY with JSON: { \"fields\": [ ... ] }."
     )
     user_prompt = f"Transcript:\n\"\"\"\n{transcript}\n\"\"\""
+
     try:
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -68,59 +127,77 @@ def extract_fields_via_openai(transcript: str) -> Dict:
                 {"role": "user",   "content": user_prompt},
             ],
             temperature=0.0,
-            max_tokens=600,
+            max_tokens=700,
         )
-        text = resp.choices[0].message.content
-        return json.loads(text)
+        return json.loads(resp.choices[0].message.content)
     except Exception as e:
         return {"error": str(e)}
 
-# — Session state initialization —
+
+# — Session state init —
 if "transcript_input" not in st.session_state:
     st.session_state.transcript_input = ""
 if "example_choice" not in st.session_state:
     st.session_state.example_choice = ""
 
-# — Sidebar —
+
+# — Sidebar: configuration & mock transcripts — 
 st.sidebar.header("Configuration")
 use_ai = st.sidebar.radio(
     "Extractor to use:",
-    options=["Dummy extractor", "AI extractor"]
+    ("Dummy extractor", "AI extractor")
 )
 
 st.sidebar.markdown("---")
 st.sidebar.header("🚀 Mock Transcripts")
 examples = {
-    "Standard Positive": """Agent: Hello, I’m Sam. Can I get your full name?
-Borrower: Alice Johnson
-Agent: What loan amount are you seeking?
-Borrower: I need a loan for $415,000""",
-    "Michael Case": """Agent: Good morning! Thank you for calling Evergreen Mortgage Solutions. My name is Lisa Carter. How can I help you today?
-Borrower: Michael Anthony Reynolds.
-Agent: The purchase price is $325,000, and I’d like a loan for $300,000.""",
-    "Missing Amount": """Agent: Hi there, please provide your full name.
-Borrower: Robert King"""
+    "Full Example": """Agent: Good morning, thank you for calling MortgageCo. Can I have your full name please?
+Borrower: William Martinez
+Agent: What property are you looking to finance?
+Borrower: It's a home at 321 Cedar Blvd, Boston, MA.
+Agent: And what's the purchase price or loan amount you need?
+Borrower: The purchase price is $790,000, and I'd like a loan for $740,000.
+Agent: What term are you considering?
+Borrower: I prefer a 15-year fixed rate.
+Agent: Our current rate is 4.96%.
+Borrower: Sounds good.
+Agent: Can you confirm your SSN and date of birth?
+Borrower: My SSN is 905-95-2209 and my DOB is 8/25/1967.
+Agent: Finally, your gross monthly income?
+Borrower: $6000.
+Agent: Thank you, I'll send next steps via email.""",
+
+    "Missing income": """Agent: Hi, full name?
+Borrower: Emily Davis
+Agent: Purchase price?
+Borrower: $500,000
+Agent: Loan amount?
+Borrower: $450,000
+Agent: Term?
+Borrower: 30-year fixed rate.
+Agent: Rate?
+Borrower: 3.85%.
+Agent: SSN and DOB?
+Borrower: 321-54-9876, DOB is 7/14/1990.""",
 }
 st.sidebar.selectbox(
     "Choose an example",
-    options=[""] + list(examples.keys()),
+    [""] + list(examples.keys()),
     key="example_choice"
 )
-if st.sidebar.button("Load into transcript"):
+if st.sidebar.button("Load example"):
     choice = st.session_state.example_choice
     if choice in examples:
         st.session_state.transcript_input = examples[choice]
 
+
 # — Main UI — 
-st.title("📝 FormsiQ 1003‑Form Field Extractor Robot")
-st.markdown(
-    "Paste the transcript and click **Extract Fields**. "
-    f"Using **{use_ai}**."
-)
+st.title("📝 FormsiQ 1003‑Form Field Extractor")
+st.markdown(f"Using **{use_ai}**, paste or load a transcript and click Extract Fields.")
 
 transcript = st.text_area(
     "Call Transcript",
-    height=250,
+    height=300,
     key="transcript_input",
     placeholder="Paste your call transcript here…"
 )
@@ -129,24 +206,22 @@ if st.button("Extract Fields"):
     if not transcript.strip():
         st.error("Please provide a transcript.")
     else:
-        with st.spinner("Extracting…"):
-            result = (
-                extract_fields_via_openai(transcript)
-                if use_ai == "AI extractor"
-                else extract_fields_dummy(transcript)
-            )
+        with st.spinner("Processing…"):
+            result = (extract_fields_via_openai(transcript)
+                      if use_ai == "AI extractor"
+                      else extract_fields_dummy(transcript))
 
         if "error" in result:
             st.error(f"Error: {result['error']}")
         else:
-            # —— NEW: JSON Output Viewer —— 
             st.subheader("JSON Output")
             st.json(result)
 
-# — CSS styling —
+
+# — Simple CSS styling — 
 st.markdown("""
 <style>
-    .stTextArea textarea { font-family: monospace; background-color: #f9f9f9; }
+    .stTextArea textarea { font-family: monospace; background: #f7f7f7; }
     .stButton>button { background-color: #2C7BE5; color: white; }
 </style>
 """, unsafe_allow_html=True)
