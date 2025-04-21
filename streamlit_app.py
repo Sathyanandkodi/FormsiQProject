@@ -199,7 +199,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # CSV upload
-uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+uploaded_file = st.file_uploader("Upload CSV file here", type=["csv"])
 transcripts: List[str] = []
 
 if uploaded_file:
