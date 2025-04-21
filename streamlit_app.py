@@ -46,6 +46,12 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
 
     return {"fields": fields}
 
+
+# — Initialize session state for transcript_input —
+if "transcript_input" not in st.session_state:
+    st.session_state.transcript_input = ""
+
+
 # — Streamlit UI setup —
 st.set_page_config(
     page_title="Dummy Mortgage Extractor",
@@ -58,17 +64,20 @@ st.markdown(
     "Paste a mortgage‑call transcript below and click **Extract Fields** to see the dummy extractor in action."
 )
 
+# Bind the textarea to session_state so we can update it from the sidebar
 transcript_input = st.text_area(
     "Call Transcript",
     height=250,
-    placeholder="e.g. Agent: ... Borrower: John Doe ..."
+    value=st.session_state.transcript_input,
+    key="transcript_input"
 )
 
+# Extraction button
 if st.button("Extract Fields"):
-    if not transcript_input.strip():
+    if not st.session_state.transcript_input.strip():
         st.error("Transcript is empty—please paste something to test.")
     else:
-        result = extract_fields_dummy(transcript_input)
+        result = extract_fields_dummy(st.session_state.transcript_input)
         fields = result.get("fields", [])
         if not fields:
             st.warning(
@@ -83,6 +92,7 @@ if st.button("Extract Fields"):
                     f"**{f['field_name']}:** {f['field_value']} "
                     f"_(Confidence: {f['confidence_score']:.2f})_"
                 )
+
 
 # — Sidebar with mock transcripts —
 st.sidebar.header("🚀 Mock Transcripts")
@@ -105,10 +115,10 @@ Agent: Great—thanks Robert. What else can I help you with today?"""
 
 choice = st.sidebar.selectbox("Choose an example", [""] + list(examples.keys()))
 if choice:
-    if st.sidebar.button("Load into textarea"):
-        st.experimental_set_query_params(dummy="")  # workaround to force rerun
-        transcript_input = examples[choice]
-        st.experimental_rerun()
+    if st.sidebar.button("Load into transcript"):
+        # Update session state; Streamlit will rerun and the textarea will reflect it
+        st.session_state.transcript_input = examples[choice]
+
 
 # — CSS styling —
 st.markdown("""
