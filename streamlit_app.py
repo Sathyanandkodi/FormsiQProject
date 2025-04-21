@@ -196,7 +196,7 @@ if st.sidebar.button("Load example"):
 
 
 # — Main UI — 
-st.title("📝1003‑Form Field Extractor")
+st.title("📝1003‑Form Field Extractor Model")
 st.markdown("Paste or upload transcripts, then click **Extract Fields**.")
 
 # CSS reminder banner
