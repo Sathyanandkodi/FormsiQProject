@@ -33,7 +33,7 @@ def extract_fields_dummy(transcript: str) -> Dict:
 
 # — Streamlit UI —
 st.set_page_config(page_title="Dummy FormsiQ Tester", layout="centered")
-st.title("🔍 Dummy Field Extractor")
+st.title("🔍 Dummy FormsiQ Tester")
 
 st.markdown("Paste a mock mortgage‑call transcript below and hit **Extract Fields** to see a stubbed result.")
 
