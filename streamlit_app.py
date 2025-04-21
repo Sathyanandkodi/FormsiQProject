@@ -18,21 +18,42 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", st.secrets.get("OPENAI_API_K
 
 def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
     """
-    Enhanced dummy extractor for key 1003 fields.
+    Enhanced dummy extractor for key 1003 fields, with added patterns:
+      - Borrower Name via "Borrower:" or "my name is"/"name's"
+      - Property Address via "home at" or "it's"
+      - Loan Amount via "loan for", "purchase price is", or "outstanding balance"
+      - Loan Term
+      - Interest Rate
+      - SSN
+      - Date of Birth
+      - Income via "annual income" or "gross monthly income"
     """
     fields: List[Dict] = []
 
     # 1) Borrower Name
+    name = None
     m = re.search(r"Borrower\s*:\s*(.+)", transcript, re.IGNORECASE)
     if m:
+        raw = m.group(1).strip().rstrip(".")
+        # look for "my name is X"
+        m2 = re.search(r"my name is\s+([A-Za-z ]+)", raw, re.IGNORECASE)
+        if not m2:
+            m2 = re.search(r"name'?s\s+([A-Za-z ]+)", raw, re.IGNORECASE)
+        name = m2.group(1).strip() if m2 else raw.split(",")[0].strip()
+    else:
+        # fallback: anywhere "my name is"
+        m2 = re.search(r"my name is\s+([A-Za-z ]+)", transcript, re.IGNORECASE)
+        if m2:
+            name = m2.group(1).strip()
+    if name:
         fields.append({
             "field_name": "Borrower Name",
-            "field_value": m.group(1).strip(),
+            "field_value": name,
             "confidence_score": 0.50
         })
 
     # 2) Property Address
-    m = re.search(r"home at\s*(.+?)\.", transcript, re.IGNORECASE)
+    m = re.search(r"(?:home at|it['’]?s)\s*(.+?)\.", transcript, re.IGNORECASE)
     if m:
         fields.append({
             "field_name": "Property Address",
@@ -41,8 +62,9 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
         })
 
     # 3) Loan Amount
-    m = re.search(r"loan for\s*\$?([\d,]+)", transcript, re.IGNORECASE) \
-        or re.search(r"purchase price is\s*\$?([\d,]+)", transcript, re.IGNORECASE)
+    m = (re.search(r"loan for\s*\$?([\d,]+)", transcript, re.IGNORECASE)
+         or re.search(r"purchase price is\s*\$?([\d,]+)", transcript, re.IGNORECASE)
+         or re.search(r"outstanding balance.*?\$?([\d,]+)", transcript, re.IGNORECASE))
     if m:
         fields.append({
             "field_name": "Loan Amount",
@@ -69,7 +91,7 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
         })
 
     # 6) SSN
-    m = re.search(r"SSN is\s*([\d-]+)", transcript, re.IGNORECASE)
+    m = re.search(r"SSN\s*(?:is)?\s*([\d-]+)", transcript, re.IGNORECASE)
     if m:
         fields.append({
             "field_name": "SSN",
@@ -78,7 +100,7 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
         })
 
     # 7) Date of Birth
-    m = re.search(r"DOB is\s*([\d/]+)", transcript, re.IGNORECASE)
+    m = re.search(r"DOB\s*(?:is)?\s*([\d/]+)", transcript, re.IGNORECASE)
     if m:
         fields.append({
             "field_name": "Date of Birth",
@@ -86,12 +108,13 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
             "confidence_score": 0.95
         })
 
-    # 8) Gross Monthly Income
-    m = re.search(r"gross monthly income.*?([\$\d,]+)", transcript, re.IGNORECASE)
+    # 8) Income
+    m = (re.search(r"annual income.*?\$?([\d,]+)", transcript, re.IGNORECASE)
+         or re.search(r"gross monthly income.*?\$?([\d,]+)", transcript, re.IGNORECASE))
     if m:
         fields.append({
-            "field_name": "Gross Monthly Income",
-            "field_value": m.group(1),
+            "field_name": "Income",
+            "field_value": f"${m.group(1).strip()}",
             "confidence_score": 0.75
         })
 
@@ -106,12 +129,11 @@ def extract_fields_via_openai(transcript: str) -> Dict:
         "You are a data extraction assistant. "
         "Extract all fields from the 1003 mortgage application form "
         "(Borrower Name, Loan Amount, Property Address, Loan Term, Interest Rate, "
-        "SSN, Date of Birth, Gross Monthly Income, etc.) from the call transcript. "
+        "SSN, Date of Birth, Income, etc.) from the call transcript. "
         "For each field, output an object with 'field_name', 'field_value', and "
         "'confidence_score' (0–1). Respond ONLY with JSON: { \"fields\": [ ... ] }."
     )
     user_prompt = f"Transcript:\n\"\"\"\n{transcript}\n\"\"\""
-
     try:
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -191,7 +213,7 @@ st.markdown("Paste or upload transcripts, then click **Extract Fields**.")
 # CSS reminder banner
 st.markdown("""
 <div style="padding:10px; background-color:#f9f9f9; border-left:4px solid #2C7BE5; margin-bottom:15px;">
-<strong>Input:</strong> Either paste a single transcript below <em>or</em> upload a CSV 
+<strong>Input:</strong> Either paste a single transcript below or upload a CSV
 (with a column named <code>transcript</code>) to process multiple records.
 </div>
 """, unsafe_allow_html=True)
