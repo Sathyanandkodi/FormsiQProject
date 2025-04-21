@@ -1,27 +1,29 @@
-# streamlit_app.py
+import os
 import re
+import json
 import streamlit as st
+import openai
 from typing import List, Dict
 
-# — Streamlit page config (must come before other st.* calls) —
+# — Streamlit page config —
 st.set_page_config(
-    page_title="FormsiQ Mortgage Extractor",
+    page_title="FormsiQ Field Extractor",
     layout="centered",
     initial_sidebar_state="expanded"
 )
 
+# — OpenAI setup — 
+# Make sure to set your API key as an env var (or in Streamlit secrets)
+openai.api_key = os.getenv("OPENAI_API_KEY", st.secrets.get("OPENAI_API_KEY", ""))
+
 def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
     """
-    Improved dummy extractor:
-    - Finds Borrower Name by spotting the agent's "full name" prompt
-      then grabbing the next "Borrower: ..." line.
-    - Finds Loan Amount by matching "loan for $XXX" or "purchase price is $XXX".
-    Returns a dict: { "fields": [ { field_name, field_value, confidence_score }, ... ] }
+    Your existing dummy extractor.
     """
     fields: List[Dict] = []
     lines = transcript.splitlines()
 
-    # 1) Borrower Name
+    # Borrower Name logic
     name = None
     for idx, line in enumerate(lines):
         if re.search(r"full name", line, re.IGNORECASE):
@@ -38,7 +40,7 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
             "confidence_score": 0.50
         })
 
-    # 2) Loan Amount
+    # Loan Amount logic
     amt = None
     m = re.search(r"loan for\s*\$?([\d,]+)", transcript, re.IGNORECASE)
     if not m:
@@ -54,81 +56,116 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
 
     return {"fields": fields}
 
-# — Initialize transcript_input in session_state if needed —
+def extract_fields_via_openai(transcript: str) -> Dict:
+    """
+    Calls OpenAI’s chat API to extract 1003‑Form fields with confidence.
+    """
+    system_prompt = (
+        "You are a data extraction assistant. "
+        "Extract all fields from the 1003 mortgage application form "
+        "(Borrower Name, Loan Amount, Property Address, Loan Term, Interest Rate, etc.) "
+        "from the call transcript. "
+        "For each field, output an object with 'field_name', 'field_value', and "
+        "'confidence_score' (0–1). "
+        "Respond ONLY with JSON: { \"fields\": [ ... ] }."
+    )
+    user_prompt = f"Transcript:\n\"\"\"\n{transcript}\n\"\"\""
+
+    try:
+        resp = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_prompt},
+            ],
+            temperature=0.0,
+            max_tokens=600,
+        )
+        text = resp.choices[0].message.content.strip()
+        return json.loads(text)
+    except Exception as e:
+        return {"error": str(e)}
+
+# — Session state initialization —
 if "transcript_input" not in st.session_state:
     st.session_state.transcript_input = ""
+if "example_choice" not in st.session_state:
+    st.session_state.example_choice = ""
 
-# — Sidebar: Mock transcripts and loader callback — 
+# — Sidebar: extractor choice & mock data loader — 
+st.sidebar.header("Configuration")
+
+use_ai = st.sidebar.radio(
+    "Extractor to use:",
+    options=["Dummy extractor", "AI extractor"],
+    help="Choose Dummy for offline testing or AI to call OpenAI."
+)
+
+st.sidebar.markdown("---")
 st.sidebar.header("🚀 Mock Transcripts")
-
 examples = {
     "Standard Positive": """Agent: Hello, I’m Sam. Can I get your full name?
 Borrower: Alice Johnson
 Agent: What loan amount are you seeking?
 Borrower: I need a loan for $415,000""",
-
     "Michael Case": """Agent: Good morning! Thank you for calling Evergreen Mortgage Solutions. My name is Lisa Carter. How can I help you today?
 Agent: Wonderful—let’s get started. Can I have your full name, please?
 Borrower: Michael Anthony Reynolds.
 Agent: And what’s the purchase price or loan amount you’re seeking?
 Borrower: The purchase price is $325,000, and I’d like a loan for $300,000.""",
-
     "Missing Amount": """Agent: Hi there, please provide your full name.
 Borrower: Robert King
 Agent: Great—thanks Robert. What else can I help you with today?"""
 }
-
-def load_example_callback():
-    choice = st.session_state.example_choice
-    if choice in examples:
-        st.session_state.transcript_input = examples[choice]
-
-# selectbox to choose example
 st.sidebar.selectbox(
     "Choose an example",
     options=[""] + list(examples.keys()),
     key="example_choice"
 )
-# button to load it
-st.sidebar.button(
-    "Load into transcript",
-    on_click=load_example_callback
-)
+if st.sidebar.button("Load into transcript"):
+    choice = st.session_state.example_choice
+    if choice in examples:
+        st.session_state.transcript_input = examples[choice]
 
 # — Main UI — 
-st.title("🔎 FormsiQ 1003‑Form Field Extractor")
+st.title("📝 FormsiQ 1003‑Form Field Extractor")
 st.markdown(
-    "Paste a mortgage‑call transcript below and click **Extract Fields** to see the FormsiQ extractor in action."
+    "Paste the transcript and click **Extract Fields**. "
+    f"Using **{use_ai}**."
 )
 
-# bind textarea to session_state
 transcript = st.text_area(
     "Call Transcript",
     height=250,
-    key="transcript_input"
+    key="transcript_input",
+    placeholder="Paste your call transcript here…"
 )
 
 if st.button("Extract Fields"):
     if not transcript.strip():
-        st.error("Transcript is empty—please paste something to test.")
+        st.error("Please provide a transcript.")
     else:
-        result = extract_fields_dummy(transcript)
-        fields = result.get("fields", [])
-        if not fields:
-            st.warning(
-                "No fields found. Try using a transcript with:\n"
-                "- an agent prompt asking for 'full name' followed by `Borrower: ...`\n"
-                "- a phrase like 'loan for $300,000' or 'purchase price is $350,000'."
-            )
-        else:
-            st.success("Found fields:")
-            for f in fields:
-                st.markdown(
-                    f"**{f['field_name']}:** {f['field_value']} "
-                    f"_(Confidence: {f['confidence_score']:.2f})_"
-                )
+        with st.spinner("Extracting…"):
+            if use_ai == "AI extractor":
+                result = extract_fields_via_openai(transcript)
+            else:
+                result = extract_fields_dummy(transcript)
 
-# — Simple CSS styling — 
+        if "error" in result:
+            st.error(f"Error: {result['error']}")
+        else:
+            fields = result.get("fields", [])
+            if not fields:
+                st.warning("No fields extracted.")
+            else:
+                st.success("Extraction complete:")
+                for f in fields:
+                    st.markdown(
+                        f"**{f['field_name']}:** {f['field_value']} "
+                        f"_(Confidence: {f['confidence_score']:.2f})_"
+                    )
+
+# — CSS styling —
 st.markdown("""
 <style>
     .stTextArea textarea {
