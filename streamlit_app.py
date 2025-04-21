@@ -18,15 +18,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", st.secrets.get("OPENAI_API_K
 
 def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
     """
-    Enhanced dummy extractor for key 1003 fields, with added patterns:
-      - Borrower Name via "Borrower:" or "my name is"/"name's"
-      - Property Address via "home at" or "it's"
-      - Loan Amount via "loan for", "purchase price is", or "outstanding balance"
-      - Loan Term
-      - Interest Rate
-      - SSN
-      - Date of Birth
-      - Income via "annual income" or "gross monthly income"
+    Enhanced dummy extractor for key 1003 fields.
     """
     fields: List[Dict] = []
 
@@ -35,13 +27,10 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
     m = re.search(r"Borrower\s*:\s*(.+)", transcript, re.IGNORECASE)
     if m:
         raw = m.group(1).strip().rstrip(".")
-        # look for "my name is X"
-        m2 = re.search(r"my name is\s+([A-Za-z ]+)", raw, re.IGNORECASE)
-        if not m2:
-            m2 = re.search(r"name'?s\s+([A-Za-z ]+)", raw, re.IGNORECASE)
+        m2 = re.search(r"my name is\s+([A-Za-z ]+)", raw, re.IGNORECASE) or \
+             re.search(r"name'?s\s+([A-Za-z ]+)", raw, re.IGNORECASE)
         name = m2.group(1).strip() if m2 else raw.split(",")[0].strip()
     else:
-        # fallback: anywhere "my name is"
         m2 = re.search(r"my name is\s+([A-Za-z ]+)", transcript, re.IGNORECASE)
         if m2:
             name = m2.group(1).strip()
@@ -62,9 +51,9 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
         })
 
     # 3) Loan Amount
-    m = (re.search(r"loan for\s*\$?([\d,]+)", transcript, re.IGNORECASE)
-         or re.search(r"purchase price is\s*\$?([\d,]+)", transcript, re.IGNORECASE)
-         or re.search(r"outstanding balance.*?\$?([\d,]+)", transcript, re.IGNORECASE))
+    m = (re.search(r"loan for\s*\$?([\d,]+)", transcript, re.IGNORECASE) or
+         re.search(r"purchase price is\s*\$?([\d,]+)", transcript, re.IGNORECASE) or
+         re.search(r"outstanding balance.*?\$?([\d,]+)", transcript, re.IGNORECASE))
     if m:
         fields.append({
             "field_name": "Loan Amount",
@@ -109,8 +98,8 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
         })
 
     # 8) Income
-    m = (re.search(r"annual income.*?\$?([\d,]+)", transcript, re.IGNORECASE)
-         or re.search(r"gross monthly income.*?\$?([\d,]+)", transcript, re.IGNORECASE))
+    m = (re.search(r"annual income.*?\$?([\d,]+)", transcript, re.IGNORECASE) or
+         re.search(r"gross monthly income.*?\$?([\d,]+)", transcript, re.IGNORECASE))
     if m:
         fields.append({
             "field_name": "Income",
@@ -175,7 +164,6 @@ Borrower: The purchase price is $790,000, and I'd like a loan for $740,000.
 Agent: What term are you considering?
 Borrower: I prefer a 15-year fixed rate.
 Agent: Our current rate is 4.96%.
-Borrower: Sounds good.
 Agent: Can you confirm your SSN and date of birth?
 Borrower: My SSN is 905-95-2209 and my DOB is 8/25/1967.
 Agent: Finally, your gross monthly income?
@@ -255,9 +243,12 @@ if st.button("Extract Fields"):
             with st.spinner(f"Processing transcript #{idx}…"):
                 if use_ai == "AI extractor":
                     result = extract_fields_via_openai(tx)
-                    if "error" in result and any(code in result["error"].lower() for code in ("quota", "429")):
-                        st.warning("🚫 OpenAI quota exceeded. Falling back to Dummy extractor.")
-                        result = extract_fields_dummy(tx)
+                    if "error" in result and any(code in result["error"].lower() for code in ("quota", "429", "rate limit")):
+                        st.error(
+                            "🚫 AI extractor is currently overloaded or out of quota.\n"
+                            "Please switch to **Dummy extractor** in the sidebar and run again."
+                        )
+                        continue
                 else:
                     result = extract_fields_dummy(tx)
 
