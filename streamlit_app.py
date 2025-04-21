@@ -23,7 +23,7 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
     fields: List[Dict] = []
     lines = transcript.splitlines()
 
-    # Borrower Name logic
+    # Borrower Name logic is here
     name = None
     for idx, line in enumerate(lines):
         if re.search(r"full name", line, re.IGNORECASE):
