@@ -12,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# — OpenAI setup — 
+# — OpenAI Setup — 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", st.secrets.get("OPENAI_API_KEY", "")))
 
 def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
