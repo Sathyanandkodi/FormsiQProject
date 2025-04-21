@@ -186,26 +186,25 @@ if st.sidebar.button("Load example"):
 
 # — Main UI — 
 st.title("📝 FormsiQ 1003‑Form Field Extractor")
-st.markdown(
-    "Paste or load a transcript and click Extract Fields."
-)
+st.markdown("Paste or upload transcripts, then click **Extract Fields**.")
 
 # CSS reminder banner
 st.markdown("""
 <div style="padding:10px; background-color:#f9f9f9; border-left:4px solid #2C7BE5; margin-bottom:15px;">
-<strong>Input:</strong> Paste a single transcript in the text box <em>or</em> upload a CSV file 
+<strong>Input:</strong> Either paste a single transcript below <em>or</em> upload a CSV 
 (with a column named <code>transcript</code>) to process multiple records.
 </div>
 """, unsafe_allow_html=True)
 
 # CSV upload
-uploaded_file = st.file_uploader("Upload CSV file here", type=["csv"])
+uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
 transcripts: List[str] = []
 
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
         if "transcript" in df.columns:
+            st.success(f"Loaded {len(df)} transcripts from {uploaded_file.name}")
             transcripts = df["transcript"].dropna().astype(str).tolist()
         else:
             st.error("CSV must contain a 'transcript' column.")
@@ -213,9 +212,8 @@ if uploaded_file:
         st.error(f"Error reading CSV: {e}")
 else:
     # fallback to single transcript textarea
-    transcripts = []
     transcript = st.text_area(
-        "Call Transcript text box",
+        "Call Transcript",
         value=st.session_state.transcript_input,
         height=250,
         key="transcript_input",
@@ -224,9 +222,10 @@ else:
     if transcript.strip():
         transcripts = [transcript.strip()]
 
+# Extraction
 if st.button("Extract Fields"):
     if not transcripts:
-        st.error("Please provide at least one transcript (via paste or CSV).")
+        st.error("Please provide at least one transcript (paste or CSV upload).")
     else:
         for idx, tx in enumerate(transcripts, start=1):
             st.markdown(f"---\n**Transcript #{idx}:**")
@@ -234,11 +233,8 @@ if st.button("Extract Fields"):
             with st.spinner(f"Processing transcript #{idx}…"):
                 if use_ai == "AI extractor":
                     result = extract_fields_via_openai(tx)
-                    # fallback on quota/429
                     if "error" in result and any(code in result["error"].lower() for code in ("quota", "429")):
-                        st.warning(
-                            "🚫 OpenAI quota exceeded. Falling back to Dummy extractor."
-                        )
+                        st.warning("🚫 OpenAI quota exceeded. Falling back to Dummy extractor.")
                         result = extract_fields_dummy(tx)
                 else:
                     result = extract_fields_dummy(tx)
@@ -248,7 +244,6 @@ if st.button("Extract Fields"):
             else:
                 st.subheader("JSON Output")
                 st.json(result)
-
 
 # — Simple CSS styling — 
 st.markdown("""
