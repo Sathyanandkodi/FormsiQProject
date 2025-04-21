@@ -1,6 +1,14 @@
+# streamlit_app.py
 import re
 import streamlit as st
 from typing import List, Dict
+
+# — Streamlit page config (must come before other st.* calls) —
+st.set_page_config(
+    page_title="Dummy Mortgage Extractor",
+    layout="centered",
+    initial_sidebar_state="expanded"
+)
 
 def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
     """
@@ -46,56 +54,13 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
 
     return {"fields": fields}
 
-
-# — Initialize session state for transcript_input —
+# — Initialize transcript_input in session_state if needed —
 if "transcript_input" not in st.session_state:
     st.session_state.transcript_input = ""
 
-
-# — Streamlit UI setup —
-st.set_page_config(
-    page_title="Dummy Mortgage Extractor",
-    layout="centered",
-    initial_sidebar_state="expanded"
-)
-st.title("🔎 Dummy 1003‑Form Field Extractor")
-
-st.markdown(
-    "Paste a mortgage‑call transcript below and click **Extract Fields** to see the dummy extractor in action."
-)
-
-# Bind the textarea to session_state so we can update it from the sidebar
-transcript_input = st.text_area(
-    "Call Transcript",
-    height=250,
-    value=st.session_state.transcript_input,
-    key="transcript_input"
-)
-
-# Extraction button
-if st.button("Extract Fields"):
-    if not st.session_state.transcript_input.strip():
-        st.error("Transcript is empty—please paste something to test.")
-    else:
-        result = extract_fields_dummy(st.session_state.transcript_input)
-        fields = result.get("fields", [])
-        if not fields:
-            st.warning(
-                "No fields found. Try using a transcript with:\n"
-                "- an agent prompt asking for 'full name' followed by `Borrower: ...`\n"
-                "- a phrase like 'loan for $300,000' or 'purchase price is $350,000'."
-            )
-        else:
-            st.success("Found fields:")
-            for f in fields:
-                st.markdown(
-                    f"**{f['field_name']}:** {f['field_value']} "
-                    f"_(Confidence: {f['confidence_score']:.2f})_"
-                )
-
-
-# — Sidebar with mock transcripts —
+# — Sidebar: Mock transcripts and loader callback — 
 st.sidebar.header("🚀 Mock Transcripts")
+
 examples = {
     "Standard Positive": """Agent: Hello, I’m Sam. Can I get your full name?
 Borrower: Alice Johnson
@@ -113,14 +78,57 @@ Borrower: Robert King
 Agent: Great—thanks Robert. What else can I help you with today?"""
 }
 
-choice = st.sidebar.selectbox("Choose an example", [""] + list(examples.keys()))
-if choice:
-    if st.sidebar.button("Load into transcript"):
-        # Update session state; Streamlit will rerun and the textarea will reflect it
+def load_example_callback():
+    choice = st.session_state.example_choice
+    if choice in examples:
         st.session_state.transcript_input = examples[choice]
 
+# selectbox to choose example
+st.sidebar.selectbox(
+    "Choose an example",
+    options=[""] + list(examples.keys()),
+    key="example_choice"
+)
+# button to load it
+st.sidebar.button(
+    "Load into transcript",
+    on_click=load_example_callback
+)
 
-# — CSS styling —
+# — Main UI — 
+st.title("🔎 Dummy 1003‑Form Field Extractor")
+st.markdown(
+    "Paste a mortgage‑call transcript below and click **Extract Fields** to see the dummy extractor in action."
+)
+
+# bind textarea to session_state
+transcript = st.text_area(
+    "Call Transcript",
+    height=250,
+    key="transcript_input"
+)
+
+if st.button("Extract Fields"):
+    if not transcript.strip():
+        st.error("Transcript is empty—please paste something to test.")
+    else:
+        result = extract_fields_dummy(transcript)
+        fields = result.get("fields", [])
+        if not fields:
+            st.warning(
+                "No fields found. Try using a transcript with:\n"
+                "- an agent prompt asking for 'full name' followed by `Borrower: ...`\n"
+                "- a phrase like 'loan for $300,000' or 'purchase price is $350,000'."
+            )
+        else:
+            st.success("Found fields:")
+            for f in fields:
+                st.markdown(
+                    f"**{f['field_name']}:** {f['field_value']} "
+                    f"_(Confidence: {f['confidence_score']:.2f})_"
+                )
+
+# — Simple CSS styling — 
 st.markdown("""
 <style>
     .stTextArea textarea {
