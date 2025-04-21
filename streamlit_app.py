@@ -15,6 +15,7 @@ st.set_page_config(
 
 # — OpenAI Setup — 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", st.secrets.get("OPENAI_API_KEY", "")))
+st.write(f"🔑 Using OpenAI model: gpt‑4o‑mini")  
 
 def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
     """
