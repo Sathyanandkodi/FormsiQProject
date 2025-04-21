@@ -1,53 +1,47 @@
-# app.py
 import re
-import streamlit as st
 from typing import List, Dict
 
 def extract_fields_dummy(transcript: str) -> Dict:
     """
-    Dummy extractor: uses simple regex to pull out
-    “Borrower Name” and “Loan Amount” if present.
-    Returns the same JSON structure as the final API.
+    Improved dummy extractor:
+    - Finds the borrower’s full name by looking for the first "Borrower:" line 
+      *after* the agent asks for it.
+    - Finds the loan amount by looking for common phrasings and a dollar‐amount.
+    Returns {"fields": [ { field_name, field_value, confidence_score }, … ]}.
     """
     fields: List[Dict] = []
+    lines = transcript.splitlines()
 
-    # Look for lines like "Borrower Name: John Doe"
-    m_name = re.search(r"Borrower Name\s*[:\-]\s*(.+)", transcript, re.IGNORECASE)
-    if m_name:
+    # 1) Borrower Name: look for agent question then next Borrower: line
+    name = None
+    for idx, line in enumerate(lines):
+        if re.search(r"full name", line, re.IGNORECASE):
+            # scan forward for the next Borrower: line
+            for sub in lines[idx+1:]:
+                m = re.match(r"Borrower\s*:\s*(.+)", sub, re.IGNORECASE)
+                if m:
+                    name = m.group(1).strip()
+                    break
+            break
+    if name:
         fields.append({
             "field_name": "Borrower Name",
-            "field_value": m_name.group(1).strip(),
-            "confidence_score": 0.5  # dummy confidence
+            "field_value": name,
+            "confidence_score": 0.5
         })
 
-    # Look for lines like "Loan Amount: $250,000"
-    m_amount = re.search(r"Loan Amount\s*[:\-]\s*(.+)", transcript, re.IGNORECASE)
-    if m_amount:
+    # 2) Loan Amount: look for "loan for $XXX" or "purchase price is $XXX"
+    amt = None
+    m = re.search(r"loan for\s*\$?([\d,]+)", transcript, re.IGNORECASE)
+    if not m:
+        m = re.search(r"purchase price is\s*\$?([\d,]+)", transcript, re.IGNORECASE)
+    if m:
+        amt = m.group(1).strip()
+    if amt:
         fields.append({
             "field_name": "Loan Amount",
-            "field_value": m_amount.group(1).strip(),
+            "field_value": f"${amt}",
             "confidence_score": 0.5
         })
 
     return {"fields": fields}
-
-# — Streamlit UI —
-st.set_page_config(page_title="Dummy FormsiQ Tester", layout="centered")
-st.title("🔍 Dummy FormsiQ Tester")
-
-st.markdown("Paste a mock mortgage‑call transcript below and hit **Extract Fields** to see a stubbed result.")
-
-transcript = st.text_area("Call Transcript", height=250)
-
-if st.button("Extract Fields"):
-    if not transcript.strip():
-        st.error("Transcript is empty – please paste something to test.")
-    else:
-        result = extract_fields_dummy(transcript)
-        fields = result.get("fields", [])
-        if not fields:
-            st.warning("No fields found. Try adding lines like `Borrower Name: Alice` or `Loan Amount: $300,000`.")
-        else:
-            st.success("Found fields:")
-            for f in fields:
-                st.markdown(f"- **{f['field_name']}:** {f['field_value']} _(Confidence: {f['confidence_score']})_")
