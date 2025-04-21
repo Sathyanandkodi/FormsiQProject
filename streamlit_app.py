@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import pandas as pd
 import streamlit as st
 from openai import OpenAI
 from typing import List, Dict
@@ -123,7 +124,6 @@ def extract_fields_via_openai(transcript: str) -> Dict:
         )
         return json.loads(resp.choices[0].message.content)
     except Exception as e:
-        # propagate error info
         return {"error": str(e)}
 
 
@@ -186,43 +186,74 @@ if st.sidebar.button("Load example"):
 
 # — Main UI — 
 st.title("📝 FormsiQ 1003‑Form Field Extractor")
-st.markdown(f"Using **{use_ai}**, paste or load a transcript and click Extract Fields.")
-
-transcript = st.text_area(
-    "Call Transcript",
-    height=300,
-    key="transcript_input",
-    placeholder="Paste your call transcript here…"
+st.markdown(
+    "Using **{use_ai}**, paste or load a transcript and click Extract Fields."
 )
 
-if st.button("Extract Fields"):
-    if not transcript.strip():
-        st.error("Please provide a transcript.")
-    else:
-        with st.spinner("Processing…"):
-            if use_ai == "AI extractor":
-                result = extract_fields_via_openai(transcript)
-                # Fallback on quota or 429 errors
-                if "error" in result and any(term in result["error"].lower() for term in ("quota", "429")):
-                    st.warning(
-                        "🚫 OpenAI quota exceeded or API limit reached. "
-                        "Falling back to Dummy extractor."
-                    )
-                    result = extract_fields_dummy(transcript)
-            else:
-                result = extract_fields_dummy(transcript)
+# CSS reminder banner
+st.markdown("""
+<div style="padding:10px; background-color:#f9f9f9; border-left:4px solid #2C7BE5; margin-bottom:15px;">
+<strong>Input:</strong> Paste a single transcript in the text box <em>or</em> upload a CSV file 
+(with a column named <code>transcript</code>) to process multiple records.
+</div>
+""", unsafe_allow_html=True)
 
-        if "error" in result:
-            st.error(f"Error: {result['error']}")
+# CSV upload
+uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+transcripts: List[str] = []
+
+if uploaded_file:
+    try:
+        df = pd.read_csv(uploaded_file)
+        if "transcript" in df.columns:
+            transcripts = df["transcript"].dropna().astype(str).tolist()
         else:
-            st.subheader("JSON Output")
-            st.json(result)
+            st.error("CSV must contain a 'transcript' column.")
+    except Exception as e:
+        st.error(f"Error reading CSV: {e}")
+else:
+    # fallback to single transcript textarea
+    transcripts = []
+    transcript = st.text_area(
+        "Call Transcript",
+        value=st.session_state.transcript_input,
+        height=250,
+        key="transcript_input",
+        placeholder="Paste your call transcript here…"
+    )
+    if transcript.strip():
+        transcripts = [transcript.strip()]
+
+if st.button("Extract Fields"):
+    if not transcripts:
+        st.error("Please provide at least one transcript (via paste or CSV).")
+    else:
+        for idx, tx in enumerate(transcripts, start=1):
+            st.markdown(f"---\n**Transcript #{idx}:**")
+            st.text_area(f"Preview #{idx}", tx, height=120, disabled=True, key=f"tx_{idx}")
+            with st.spinner(f"Processing transcript #{idx}…"):
+                if use_ai == "AI extractor":
+                    result = extract_fields_via_openai(tx)
+                    # fallback on quota/429
+                    if "error" in result and any(code in result["error"].lower() for code in ("quota", "429")):
+                        st.warning(
+                            "🚫 OpenAI quota exceeded. Falling back to Dummy extractor."
+                        )
+                        result = extract_fields_dummy(tx)
+                else:
+                    result = extract_fields_dummy(tx)
+
+            if "error" in result:
+                st.error(f"Error: {result['error']}")
+            else:
+                st.subheader("JSON Output")
+                st.json(result)
 
 
 # — Simple CSS styling — 
 st.markdown("""
 <style>
-    .stTextArea textarea { font-family: monospace; background: #f7f7f7; }
+    .stTextArea textarea { font-family: monospace; }
     .stButton>button { background-color: #2C7BE5; color: white; }
 </style>
 """, unsafe_allow_html=True)
