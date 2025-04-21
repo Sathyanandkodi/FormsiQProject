@@ -98,7 +98,7 @@ st.sidebar.button(
 # — Main UI — 
 st.title("🔎 FormsiQ 1003‑Form Field Extractor")
 st.markdown(
-    "Paste a mortgage‑call transcript below and click **Extract Fields** to see the dummy extractor in action."
+    "Paste a mortgage‑call transcript below and click **Extract Fields** to see the FormsiQ extractor in action."
 )
 
 # bind textarea to session_state
