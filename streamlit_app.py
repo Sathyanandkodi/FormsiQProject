@@ -127,7 +127,7 @@ if st.sidebar.button("Load into transcript"):
         st.session_state.transcript_input = examples[choice]
 
 # — Main UI — 
-st.title("📝 FormsiQ 1003‑Form Field Extractor")
+st.title("📝 FormsiQ 1003‑Form Field Extractor Robot")
 st.markdown(
     "Paste the transcript and click **Extract Fields**. "
     f"Using **{use_ai}**."
