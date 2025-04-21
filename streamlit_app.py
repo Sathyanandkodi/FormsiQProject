@@ -5,7 +5,7 @@ from typing import List, Dict
 
 # — Streamlit page config (must come before other st.* calls) —
 st.set_page_config(
-    page_title="Dummy Mortgage Extractor",
+    page_title="FormsiQ Mortgage Extractor",
     layout="centered",
     initial_sidebar_state="expanded"
 )
