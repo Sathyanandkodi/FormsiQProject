@@ -144,7 +144,7 @@ if st.sidebar.button("Load example"):
     st.session_state.transcript_input = examples.get(choice, "")
 
 # — Main UI —
-st.title("📝1003‑Form Field Extractor Model")
+st.title("📝 FormsiQ 1003‑Form Field Extractor Model")
 st.markdown("Paste or upload transcripts, then click **Extract Fields**.")
 
 # input banner
