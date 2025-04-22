@@ -110,7 +110,6 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
 
     return {"fields": fields}
 
-
 def extract_fields_via_openai(transcript: str) -> Dict:
     """
     AI extractor: calls OpenAI to get full 1003 field extraction.
@@ -137,7 +136,6 @@ def extract_fields_via_openai(transcript: str) -> Dict:
         return json.loads(resp.choices[0].message.content)
     except Exception as e:
         return {"error": str(e)}
-
 
 # — Session state init —
 if "transcript_input" not in st.session_state:
@@ -168,7 +166,6 @@ if st.sidebar.button("Load example"):
     choice = st.session_state.example_choice
     if choice in examples:
         st.session_state.transcript_input = examples[choice]
-
 
 # — Main UI — 
 st.title("📝FormsiQ 1003‑Form Field Extractor Model")
