@@ -155,35 +155,10 @@ use_ai = st.sidebar.radio(
 
 st.sidebar.markdown("---")
 st.sidebar.header("🚀 Mock Transcripts")
-examples = {
-    "Full Example": """Agent: Good morning, thank you for calling MortgageCo. Can I have your full name please?
-Borrower: William Martinez
-Agent: What property are you looking to finance?
-Borrower: It's a home at 321 Cedar Blvd, Boston, MA.
-Agent: And what's the purchase price or loan amount you need?
-Borrower: The purchase price is $790,000, and I'd like a loan for $740,000.
-Agent: What term are you considering?
-Borrower: I prefer a 15-year fixed rate.
-Agent: Our current rate is 4.96%.
-Agent: Can you confirm your SSN and date of birth?
-Borrower: My SSN is 905-95-2209 and my DOB is 8/25/1967.
-Agent: Finally, your gross monthly income?
-Borrower: $6000.
-Agent: Thank you, I'll send next steps via email.""",
 
-    "Missing income": """Agent: Hi, full name?
-Borrower: Emily Davis
-Agent: Purchase price?
-Borrower: $500,000
-Agent: Loan amount?
-Borrower: $450,000
-Agent: Term?
-Borrower: 30-year fixed rate.
-Agent: Rate?
-Borrower: 3.85%.
-Agent: SSN and DOB?
-Borrower: 321-54-9876, DOB is 7/14/1990.""",
-}
+with open("mock_transcripts.json") as f:
+    examples = json.load(f)
+
 st.sidebar.selectbox(
     "Choose an example",
     [""] + list(examples.keys()),
