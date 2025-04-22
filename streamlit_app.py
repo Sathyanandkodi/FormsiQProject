@@ -3,7 +3,9 @@ import re
 import json
 import pandas as pd
 import streamlit as st
+import openai
 from openai import OpenAI
+from openai.error import RateLimitError, AuthenticationError, APIError
 from typing import List, Dict
 
 # — Streamlit page config —
@@ -113,7 +115,7 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
 
 def extract_fields_via_openai(transcript: str) -> Dict:
     """
-    AI extractor: calls OpenAI to get full 1003 field extraction.
+    AI extractor: calls OpenAI to get full 1003 field extraction and maps errors.
     """
     system_prompt = (
         "You are a data extraction assistant. "
@@ -124,6 +126,7 @@ def extract_fields_via_openai(transcript: str) -> Dict:
         "'confidence_score' (0–1). Respond ONLY with JSON: { \"fields\": [ ... ] }."
     )
     user_prompt = f"Transcript:\n\"\"\"\n{transcript}\n\"\"\""
+
     try:
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -132,11 +135,18 @@ def extract_fields_via_openai(transcript: str) -> Dict:
                 {"role": "user",   "content": user_prompt},
             ],
             temperature=0.0,
-            max_tokens=700,
+            max_tokens=700
         )
         return json.loads(resp.choices[0].message.content)
+
+    except RateLimitError:
+        return {"error_code": 429, "error_message": "Rate limit exceeded. Please try again later or switch to Dummy extractor."}
+    except AuthenticationError:
+        return {"error_code": 401, "error_message": "Authentication failed. Please check your OpenAI API key."}
+    except APIError:
+        return {"error_code": 500, "error_message": "OpenAI service error. Please try again later."}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error_code": 0, "error_message": f"Unexpected error: {e}"}
 
 
 # — Session state init —
@@ -148,47 +158,15 @@ if "example_choice" not in st.session_state:
 
 # — Sidebar: configuration & mock transcripts — 
 st.sidebar.header("Configuration")
-use_ai = st.sidebar.radio(
-    "Extractor to use:",
-    ("Dummy extractor", "AI extractor")
-)
+use_ai = st.sidebar.radio("Extractor to use:", ("Dummy extractor", "AI extractor"))
 
 st.sidebar.markdown("---")
 st.sidebar.header("🚀 Mock Transcripts")
 examples = {
-    "Full Example": """Agent: Good morning, thank you for calling MortgageCo. Can I have your full name please?
-Borrower: William Martinez
-Agent: What property are you looking to finance?
-Borrower: It's a home at 321 Cedar Blvd, Boston, MA.
-Agent: And what's the purchase price or loan amount you need?
-Borrower: The purchase price is $790,000, and I'd like a loan for $740,000.
-Agent: What term are you considering?
-Borrower: I prefer a 15-year fixed rate.
-Agent: Our current rate is 4.96%.
-Agent: Can you confirm your SSN and date of birth?
-Borrower: My SSN is 905-95-2209 and my DOB is 8/25/1967.
-Agent: Finally, your gross monthly income?
-Borrower: $6000.
-Agent: Thank you, I'll send next steps via email.""",
-
-    "Missing income": """Agent: Hi, full name?
-Borrower: Emily Davis
-Agent: Purchase price?
-Borrower: $500,000
-Agent: Loan amount?
-Borrower: $450,000
-Agent: Term?
-Borrower: 30-year fixed rate.
-Agent: Rate?
-Borrower: 3.85%.
-Agent: SSN and DOB?
-Borrower: 321-54-9876, DOB is 7/14/1990.""",
+    "Full Example": """Agent: ...""",
+    "Missing income": """Agent: ..."""
 }
-st.sidebar.selectbox(
-    "Choose an example",
-    [""] + list(examples.keys()),
-    key="example_choice"
-)
+st.sidebar.selectbox("Choose an example", [""] + list(examples.keys()), key="example_choice")
 if st.sidebar.button("Load example"):
     choice = st.session_state.example_choice
     if choice in examples:
@@ -196,14 +174,14 @@ if st.sidebar.button("Load example"):
 
 
 # — Main UI — 
-st.title("📝1003‑Form Field Extractor Model")
+st.title("📝 FormsiQ 1003‑Form Field Extractor")
 st.markdown("Paste or upload transcripts, then click **Extract Fields**.")
 
 # CSS reminder banner
 st.markdown("""
-<div style="padding:10px; background-color:#f9f9f9; border-left:4px solid #2C7BE5; margin-bottom:15px;">
-<strong>Input:</strong> Either paste a single transcript below or upload a CSV
-(with a column named <code>transcript</code>) to process multiple records.
+<div style="padding:10px;background:#f9f9f9;border-left:4px solid #2C7BE5;margin-bottom:15px;">
+<strong>Input:</strong> Paste a single transcript below or upload a CSV
+(with a <code>transcript</code> column) to process multiple records.
 </div>
 """, unsafe_allow_html=True)
 
@@ -233,33 +211,48 @@ else:
     if transcript.strip():
         transcripts = [transcript.strip()]
 
-# Extraction
+# Extraction & friendly messaging
 if st.button("Extract Fields"):
     if not transcripts:
-        st.error("Please provide at least one transcript (paste or CSV upload).")
+        st.error("Invalid input format: no transcript provided.")
     else:
         for idx, tx in enumerate(transcripts, start=1):
             st.markdown(f"---\n**Transcript #{idx}:**")
             st.text_area(f"Preview #{idx}", tx, height=120, disabled=True, key=f"tx_{idx}")
+
             with st.spinner(f"Processing transcript #{idx}…"):
                 if use_ai == "AI extractor":
                     result = extract_fields_via_openai(tx)
-                    if "error" in result and any(code in result["error"].lower() for code in ("quota", "429", "rate limit")):
-                        st.error(
-                            "🚫 AI extractor is currently overloaded or out of quota.\n"
-                            "Please switch to **Dummy extractor** in the sidebar and run again."
-                        )
+                    # AI error?
+                    if "error_code" in result:
+                        st.error(f"{result['error_message']} (Code: {result['error_code']})")
                         continue
                 else:
                     result = extract_fields_dummy(tx)
 
-            if "error" in result:
-                st.error(f"Error: {result['error']}")
-            else:
-                st.subheader("JSON Output")
-                st.json(result)
+            # Missing or inconsistent fields?
+            fields = result.get("fields", [])
+            # Check at minimum Borrower Name + Loan Amount
+            names = [f["field_name"] for f in fields]
+            if not fields:
+                st.warning(
+                    "No fields found. Please ensure your transcript includes lines like:\n"
+                    "- Borrower: Alice Johnson\n"
+                    "- Loan Amount: $250,000"
+                )
+                continue
+            if "Borrower Name" not in names or "Loan Amount" not in names:
+                st.warning(
+                    "Some required fields are missing. Make sure to include at least:\n"
+                    "- Borrower Name\n"
+                    "- Loan Amount"
+                )
 
-# — Simple CSS styling — 
+            # Display successful JSON output
+            st.subheader("JSON Output")
+            st.json(result)
+
+# — CSS styling — 
 st.markdown("""
 <style>
     .stTextArea textarea { font-family: monospace; }
