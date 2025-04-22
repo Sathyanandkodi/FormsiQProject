@@ -1,3 +1,4 @@
+python
 import os
 import re
 import json
@@ -87,7 +88,7 @@ def extract_fields_dummy(transcript: str) -> Dict[str, List[Dict]]:
     if m:
         inc = f"${m.group(1).strip()}"
         fields.append({'field_name': 'Income', 'field_value': inc, 'confidence_score': 0.75})
-    # Fill missing
+    # Ensure all fields present
     normalize_fields(fields)
     return {'fields': fields}
 
@@ -112,7 +113,6 @@ def extract_fields_via_openai(transcript: str) -> Dict:
             max_tokens=700
         )
         result = json.loads(resp.choices[0].message.content)
-        # ensure all fields present
         result['fields'] = normalize_fields(result.get('fields', []))
         return result
     except Exception as e:
@@ -130,13 +130,11 @@ use_ai = st.sidebar.radio("Extractor to use:", ("Dummy extractor", "AI extractor
 st.sidebar.markdown("---")
 st.sidebar.header("🚀 Mock Transcripts")
 examples = {
-    # 10 diverse scenarios (full, missing, varied, edge, negative)
     "Full Example": "...",
     "Missing Income": "...",
     "Alternate Phrasing": "...",
     "Unusual Address": "...",
     "Invalid Data": "Hello world",
-    # add more as needed
 }
 st.sidebar.selectbox("Choose an example", [""] + list(examples.keys()), key="example_choice")
 if st.sidebar.button("Load example"):
@@ -147,10 +145,10 @@ if st.sidebar.button("Load example"):
 st.title("📝 FormsiQ 1003‑Form Field Extractor Model")
 st.markdown("Paste or upload transcripts, then click **Extract Fields**.")
 
-# input banner
+# Input banner
 st.markdown(
-    '<div style="padding:10px; background:#f9f9f9; border-left:4px solid #2C7BE5;">'
-    '<strong>Input:</strong> Paste a transcript or upload a CSV with a transcript column.'</div>',
+    "<div style='padding:10px; background:#f9f9f9; border-left:4px solid #2C7BE5;'>"
+    "<strong>Input:</strong> Paste a transcript or upload a CSV with a transcript column.</div>",
     unsafe_allow_html=True
 )
 
@@ -198,9 +196,10 @@ if st.button("Extract Fields"):
 # Styling
 st.markdown(
     """
-    <style>
-      .stTextArea textarea { font-family: monospace; }
-      .stButton>button { background-color: #2C7BE5; color: white; }
-    </style>
-    """, unsafe_allow_html=True
+      <style>
+        .stTextArea textarea { font-family: monospace; }
+        .stButton>button { background-color: #2C7BE5; color: white; }
+      </style>
+    """,
+    unsafe_allow_html=True
 )
