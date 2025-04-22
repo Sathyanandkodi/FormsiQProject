@@ -216,6 +216,9 @@ if st.button("Extract Fields"):
             with st.spinner(f"Processing transcript #{idx}…"):
                 if use_ai == "AI extractor":
                     result = extract_fields_via_openai(tx)
+                    if isinstance(result, dict) and "fields" in result and not result["fields"]:
+                        st.info("There is no data relevant to 1003 form from the provided transcript. Please check again.")
+                        continue
                     if "error" in result and any(code in result["error"].lower() for code in ("quota", "429", "rate limit")):
                         st.error(
                             "🚫 AI extractor is currently overloaded or out of quota.\n"
